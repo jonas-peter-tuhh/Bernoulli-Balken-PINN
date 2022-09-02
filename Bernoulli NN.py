@@ -46,11 +46,18 @@ optimizer = torch.optim.Adam(net.parameters(), lr=learning_rate)
 scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=500, verbose=True)
 #mean_loss = sum(loss)/len(loss)
 
+#Definition der Parameter des statischen Ersatzsystems
+Lp = float(input('Abstand Kraftangriffspunkt - Einspannung [m]:'))
+P  = float(input('Einzellast [kN]:'))
+Lb = float(input('Länge des Kragarms [m]:'))
+EI = float(input('EI des Balkens [10^-6 kNcm²]'))
+
+#ODE als Loss-Funktion
 def f(x, net):
     u = net(x)  # ,p,px)
     u_x = torch.autograd.grad(u, x, create_graph=True, retain_graph=True, grad_outputs=torch.ones_like(u))[0]
     u_xx = torch.autograd.grad(u_x, x, create_graph=True, retain_graph=True, grad_outputs=torch.ones_like(u))[0]
-    ode = u_xx + 5 * (2.50 - x) / 17.50 * (x <= 2.50 )
+    ode = u_xx + P * (Lp - x) / EI * (x <= Lp )
     return ode
 #ode = w'' + P[kN] * (Lp[cm] - x[cm]) / EI[kNcm²]
 #P = 5kN
@@ -114,7 +121,7 @@ for epoch in range(iterations):
 #%%
 import matplotlib.pyplot as plt
 
-x = np.linspace(0,5,10000)
+x = np.linspace(0,Lb,10000)
 pt_x = torch.unsqueeze(Variable(torch.from_numpy(x).float(), requires_grad=False).to(device), 1)
 
 pt_u_out = net(pt_x)
