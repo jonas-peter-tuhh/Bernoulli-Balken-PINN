@@ -16,12 +16,12 @@ class Net(nn.Module):
     def __init__(self):
         super(Net, self).__init__()
         self.hidden_layer1 = nn.Linear(1, 5)
-        self.hidden_layer2 = nn.Linear(5, 5)
-        self.hidden_layer3 = nn.Linear(5, 5)
-        self.hidden_layer4 = nn.Linear(5, 5)
-        self.hidden_layer5 = nn.Linear(5, 5)
-        self.hidden_layer6 = nn.Linear(5, 5)
-        self.hidden_layer7 = nn.Linear(5, 5)
+        self.hidden_layer2 = nn.Linear(5, 9)
+        self.hidden_layer3 = nn.Linear(9, 9)
+        self.hidden_layer4 = nn.Linear(9, 9)
+        self.hidden_layer5 = nn.Linear(9, 9)
+        self.hidden_layer6 = nn.Linear(9, 9)
+        self.hidden_layer7 = nn.Linear(9, 5)
         self.output_layer = nn.Linear(5, 1)
 
     def forward(self, x):  # ,p,px):
@@ -37,32 +37,34 @@ class Net(nn.Module):
         return output
 
 #Hyperparameter
-learning_rate = 0.1
+learning_rate = 0.01
 
 net = Net()
 net = net.to(device)
 mse_cost_function = torch.nn.MSELoss()  # Mean squared error
 optimizer = torch.optim.Adam(net.parameters(), lr=learning_rate)
-scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=10, verbose=True)
+scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=500, verbose=True)
 #mean_loss = sum(loss)/len(loss)
 
 def f(x, net):
     u = net(x)  # ,p,px)
     u_x = torch.autograd.grad(u, x, create_graph=True, retain_graph=True, grad_outputs=torch.ones_like(u))[0]
     u_xx = torch.autograd.grad(u_x, x, create_graph=True, retain_graph=True, grad_outputs=torch.ones_like(u))[0]
-    ode = u_xx + 5 * (100 - x) / 175 * (x <= 100 )
+    ode = u_xx + 5 * (2.50 - x) / 17.50 * (x <= 2.50 )
     return ode
-
+#ode = w'' + P[kN] * (Lp[cm] - x[cm]) / EI[kNcm²]
+#P = 5kN
+#E= 21000 kN/cm², I= 833,33 cm^4, EI = 17500000 kNcm²
 
 # x_bc = x_bc = np.linspace(0,5,500)
-iterations = 10000
+iterations = 6000
 previous_validation_loss = 99999999.0
 for epoch in range(iterations):
     optimizer.zero_grad()  # to make the gradients zero
-    x_bc = np.linspace(0, 500, 500)
-    #linspace x Vektor Länge 50k und Werte 0 und 500 gleichmäßig sortiert, Abstand immer gleich
-    p_bc = np.random.uniform(low=0, high=500, size=(500, 1))
-    px_bc = np.random.uniform(low=0, high=500, size=(500, 1))
+    x_bc = np.linspace(0, 5, 500)
+    #linspace x Vektor Länge dritter Eintrag und Werte 0 und 500 gleichmäßig sortiert, Abstand immer gleich
+    p_bc = np.random.uniform(low=0, high=5, size=(500, 1))
+    px_bc = np.random.uniform(low=0, high=5, size=(500, 1))
 
     pt_x_bc = torch.unsqueeze(Variable(torch.from_numpy(x_bc).float(), requires_grad=False).to(device), 1)
     #unsqueeze wegen Kompatibilität
@@ -78,7 +80,7 @@ for epoch in range(iterations):
     #e2=w
     mse_bc = mse_cost_function(e1, pt_zero) + mse_cost_function(e2, pt_zero)
 
-    x_collocation = np.random.uniform(low=0.0, high=500, size=(5000, 1))
+    x_collocation = np.random.uniform(low=0.0, high=5, size=(5000, 1))
     #px_collocation = np.random.uniform(low=0.0, high=500, size=(5000, 1))
     #p_collocation = np.random.uniform(low=0, high=1000, size=(5000, 1))
     all_zeros = np.zeros((5000, 1))
@@ -112,7 +114,7 @@ for epoch in range(iterations):
 #%%
 import matplotlib.pyplot as plt
 
-x = np.linspace(0,500,10000)
+x = np.linspace(0,5,10000)
 pt_x = torch.unsqueeze(Variable(torch.from_numpy(x).float(), requires_grad=False).to(device), 1)
 
 pt_u_out = net(pt_x)
