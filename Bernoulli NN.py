@@ -60,11 +60,9 @@ def f(x, net):
     ode = u_xx + P * (Lp - x) / EI * (x <= Lp )
     return ode
 #ode = w'' + P[kN] * (Lp[cm] - x[cm]) / EI[kNcm²]
-#P = 5kN
-#E= 21000 kN/cm², I= 833,33 cm^4, EI = 17500000 kNcm²
 
 # x_bc = x_bc = np.linspace(0,5,500)
-iterations = 6000
+iterations = 10000
 previous_validation_loss = 99999999.0
 for epoch in range(iterations):
     optimizer.zero_grad()  # to make the gradients zero
@@ -75,8 +73,6 @@ for epoch in range(iterations):
 
     pt_x_bc = torch.unsqueeze(Variable(torch.from_numpy(x_bc).float(), requires_grad=False).to(device), 1)
     #unsqueeze wegen Kompatibilität
-    #pt_p_bc = Variable(torch.from_numpy(p_bc).float(), requires_grad=False).to(device)
-    #pt_px_bc = Variable(torch.from_numpy(px_bc).float(), requires_grad=False).to(device)
     pt_zero = Variable(torch.from_numpy(np.zeros(1)).float(), requires_grad=False).to(device)
 
     net_bc_out = net(pt_x_bc)  # ,pt_p_bc,pt_px_bc)
@@ -88,13 +84,9 @@ for epoch in range(iterations):
     mse_bc = mse_cost_function(e1, pt_zero) + mse_cost_function(e2, pt_zero)
 
     x_collocation = np.random.uniform(low=0.0, high=5, size=(5000, 1))
-    #px_collocation = np.random.uniform(low=0.0, high=500, size=(5000, 1))
-    #p_collocation = np.random.uniform(low=0, high=1000, size=(5000, 1))
     all_zeros = np.zeros((5000, 1))
 
     pt_x_collocation = Variable(torch.from_numpy(x_collocation).float(), requires_grad=True).to(device)
-    #pt_px_collocation = Variable(torch.from_numpy(px_collocation).float(), requires_grad=False).to(device)
-    #pt_p_collocation = Variable(torch.from_numpy(p_collocation).float(), requires_grad=False).to(device)
     pt_all_zeros = Variable(torch.from_numpy(all_zeros).float(), requires_grad=False).to(device)
 
     f_out = f(pt_x_collocation, net)  # ,pt_px_collocation,pt_p_collocation,net)
@@ -118,19 +110,77 @@ for epoch in range(iterations):
 
 
 
-#%%
-import matplotlib.pyplot as plt
 
-x = np.linspace(0,Lb,10000)
+
+##
+import matplotlib.pyplot as plt
+import numpy as np
+from scipy.interpolate import splrep, splev
+
+plt.rcParams['text.usetex'] = True
+plt.rcParams.update({
+    "text.usetex": True,
+    "font.family": "sans-serif",
+    "font.sans-serif": ["Helvetica"]})
+
+x = np.linspace(0,Lb,1000)
 pt_x = torch.unsqueeze(Variable(torch.from_numpy(x).float(), requires_grad=False).to(device), 1)
 
 pt_u_out = net(pt_x)
 u_out_cpu = pt_u_out.cpu()
 u_out = u_out_cpu.detach()
 u_out = u_out.numpy()
-plt.plot(x, u_out)
-plt.show()
 
+
+u_der = np.gradient(np.squeeze(u_out),x)
+bspl = splrep(x,u_der,s=5)
+u_der_smooth= splev(x,bspl)
+u_der2 = np.gradient(np.squeeze(u_der_smooth),x)
+
+fig = plt.figure()
+
+plt.subplot(3, 2, 1)
+plt.xlabel('Meter')
+plt.ylabel('$v$ [cm]')
+plt.plot(x, u_out)
+plt.grid()
+
+plt.subplot(3, 2, 3)
+plt.xlabel('Meter')
+plt.ylabel('$\phi$ $(10^{-2})$')
+plt.plot(x, u_der_smooth)
+plt.grid()
+
+plt.subplot(3, 2, 5)
+plt.xlabel('Meter')
+plt.ylabel('$\kappa$ $(10^{-4})$[1/cm]')
+plt.plot(x, u_der2)
+plt.grid()
+
+#Analytische Lösung
+y1= (-5*(500-x*100)/17000000)*10**4
+y2= (-5*(500*(x*100)-0.5*(x*100)**2)/17000000)*10**2
+y3= -5*(250*(x*100)**2-1/6*(x*100)**3)/17000000
+plt.subplot(3, 2, 2)
+plt.xlabel('Meter')
+plt.ylabel('$v$ [cm]')
+plt.plot(x, y3)
+plt.grid()
+
+plt.subplot(3, 2, 4)
+plt.xlabel('Meter')
+plt.ylabel('$\phi$ $(10^{-2})$')
+plt.plot(x, y2)
+plt.grid()
+
+plt.subplot(3, 2, 6)
+plt.xlabel('Meter')
+plt.ylabel('$\kappa$ $(10^{-4})$[1/cm]')
+plt.plot(x, y1)
+plt.grid()
+
+plt.show()
+##
 
 
 
