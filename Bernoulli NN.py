@@ -46,23 +46,41 @@ optimizer = torch.optim.Adam(net.parameters(), lr=learning_rate)
 scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=500, verbose=True)
 #mean_loss = sum(loss)/len(loss)
 
-#Definition der Parameter des statischen Ersatzsystems
-Lp = float(input('Abstand Kraftangriffspunkt - Einspannung [m]:'))
-P  = float(input('Einzellast [kN]:'))
-Lb = float(input('Länge des Kragarms [m]:'))
-EI = float(input('EI des Balkens [10^-6 kNcm²]'))
+LF = str(input('Lastfall(e -> Einzellast, s -> Streckenlast)'))
+if(LF != 'e' and LF != 's'):
+    raise Exception('Ungültiger Lastfall')
 
-#ODE als Loss-Funktion
-def f(x, net):
-    u = net(x)  # ,p,px)
-    u_x = torch.autograd.grad(u, x, create_graph=True, retain_graph=True, grad_outputs=torch.ones_like(u))[0]
-    u_xx = torch.autograd.grad(u_x, x, create_graph=True, retain_graph=True, grad_outputs=torch.ones_like(u))[0]
-    ode = u_xx + P * (Lp - x) / EI * (x <= Lp )
-    return ode
-#ode = w'' + P[kN] * (Lp[cm] - x[cm]) / EI[kNcm²]
+if (LF == 'e'):
+    #Definition der Parameter des statischen Ersatzsystems
+    Lp = float(input('Abstand Kraftangriffspunkt - Einspannung [m]:'))
+    P  = float(input('Einzellast [kN]:'))
+    Lb = float(input('Länge des Kragarms [m]:'))
+    EI = float(input('EI des Balkens [10^-6 kNcm²]'))
 
-# x_bc = x_bc = np.linspace(0,5,500)
-iterations = 10000
+    #ODE als Loss-Funktion, Einzellast
+    def f(x, net):
+        u = net(x)  # ,p,px)
+        u_x = torch.autograd.grad(u, x, create_graph=True, retain_graph=True, grad_outputs=torch.ones_like(u))[0]
+        u_xx = torch.autograd.grad(u_x, x, create_graph=True, retain_graph=True, grad_outputs=torch.ones_like(u))[0]
+        ode = u_xx + P * (Lp - x) / EI * (x <= Lp )
+        return ode
+
+elif(LF == 's'):
+    #ODE als Loss-Funktion, Streckenlast
+    Ln = float(input('Länge Einspannung bis Anfang Streckenlast [m]'))
+    Lq = float(input('Länge Streckenlast [m]'))
+    q  = float(input('Streckenlast [kN/m]'))
+    Lb = float(input('Länge des Kragarms [m]:'))
+    EI = float(input('EI des Balkens [10^-6 kNcm²]'))
+
+    def f(x, net):
+        u = net(x)  # ,p,px)
+        u_x = torch.autograd.grad(u, x, create_graph=True, retain_graph=True, grad_outputs=torch.ones_like(u))[0]
+        u_xx = torch.autograd.grad(u_x, x, create_graph=True, retain_graph=True, grad_outputs=torch.ones_like(u))[0]
+        ode = u_xx + q * (Lq + Ln - x) * ((Ln + Lq - x)/2) / EI * (x <= Ln+Lq )
+        return ode
+x_bc = x_bc = np.linspace(0,5,500)
+iterations = 5000
 previous_validation_loss = 99999999.0
 for epoch in range(iterations):
     optimizer.zero_grad()  # to make the gradients zero
@@ -157,26 +175,48 @@ plt.ylabel('$\kappa$ $(10^{-4})$[1/cm]')
 plt.plot(x, u_der2)
 plt.grid()
 
-#Analytische Lösung
-y1= (-5*(500-x*100)/17000000)*10**4
-y2= (-5*(500*(x*100)-0.5*(x*100)**2)/17000000)*10**2
-y3= -5*(250*(x*100)**2-1/6*(x*100)**3)/17000000
+#Analytische Lösung Einzellast
+#y1= (-5*(500-x*100)/17000000)*10**4
+#y2= (-5*(500*(x*100)-0.5*(x*100)**2)/17000000)*10**2
+#y3= -5*(250*(x*100)**2-1/6*(x*100)**3)/17000000
+#plt.subplot(3, 2, 2)
+#plt.xlabel('Meter')
+#plt.ylabel('$v$ [cm]')
+#plt.plot(x, y3)
+#plt.grid()
+
+#plt.subplot(3, 2, 4)
+#plt.xlabel('Meter')
+#plt.ylabel('$\phi$ $(10^{-2})$')
+#plt.plot(x, y2)
+#plt.grid()
+
+#plt.subplot(3, 2, 6)
+#plt.xlabel('Meter')
+#plt.ylabel('$\kappa$ $(10^{-4})$[1/cm]')
+#plt.plot(x, y1)
+#plt.grid()
+
+#Analytische Lösung Streckenlast
+z1= (-q *((Lq + Ln - x)**2)/EI)/2
+z2= (q/(3*EI)*((Ln+Lq-x)**3-(Ln+Lq)**3))/2
+z3= (q/(3*EI)*(-1/4*(Ln+Lq-x)**4-(Ln+Lq)**3*x+1/4*(Ln+Lq)**4))/2
 plt.subplot(3, 2, 2)
 plt.xlabel('Meter')
 plt.ylabel('$v$ [cm]')
-plt.plot(x, y3)
+plt.plot(x, z3)
 plt.grid()
 
 plt.subplot(3, 2, 4)
 plt.xlabel('Meter')
 plt.ylabel('$\phi$ $(10^{-2})$')
-plt.plot(x, y2)
+plt.plot(x, z2)
 plt.grid()
 
 plt.subplot(3, 2, 6)
 plt.xlabel('Meter')
 plt.ylabel('$\kappa$ $(10^{-4})$[1/cm]')
-plt.plot(x, y1)
+plt.plot(x, z1)
 plt.grid()
 
 plt.show()
