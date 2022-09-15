@@ -3,10 +3,14 @@
 Created on Mon Aug 29 17:20:05 2022
 @author: Jonas Peter
 """
-
+import scipy.integrate
 import torch
 import torch.nn as nn
 from torch.autograd import Variable
+import scipy as sp
+import scipy.integrate as integrate
+from scipy.integrate import quad
+import scipy.special as special
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 import numpy as np
@@ -48,50 +52,67 @@ scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=500, 
 
 Lb = float(input('Länge des Kragarms [m]: '))
 EI = float(input('EI des Balkens [10^-6 kNcm²]: '))
-LFE = int(input('Anzahl Einzellasten: '))
 LFS = int(input('Anzahl Streckenlasten: '))
 
-Lp = np.zeros(LFE)
-P = np.zeros(LFE)
+#Lp = np.zeros(LFE)
+#P = np.zeros(LFE)
 Ln = np.zeros(LFS)
 Lq = np.zeros(LFS)
-q = np.zeros(LFS)
+#q = np.zeros(LFS)
+s = [None] * LFS
 
-for i in range(LFE):
     # Definition der Parameter des statischen Ersatzsystems
-    Lp[i] = float(input('Abstand Kraftangriffspunkt der ' + str(i + 1) + '. Einzellast  - Einspannung [m]:'))
-    P[i] = float(input(str(i + 1) + '. Einzellast [kN]:'))
+
 
 for i in range(LFS):
     # ODE als Loss-Funktion, Streckenlast
     Ln[i] = float(input('Länge Einspannung bis Anfang der ' + str(i + 1) + '. Streckenlast [m]: '))
     Lq[i] = float(input('Länge der ' + str(i + 1) + '. Streckenlast [m]: '))
-    q[i] = float(input(str(i + 1) + '. Streckenlast [kN/m]: '))
+    s[i] = input(str(i + 1)+ '. Streckenlast eingeben: ')
 
+def h(x,j):
+    return eval(s[j])
 
 def f(x, net):
     u = net(x)  # ,p,px)
     u_x = torch.autograd.grad(u, x, create_graph=True, retain_graph=True, grad_outputs=torch.ones_like(u))[0]
     u_xx = torch.autograd.grad(u_x, x, create_graph=True, retain_graph=True, grad_outputs=torch.ones_like(u))[0]
+    u_xxx = torch.autograd.grad(u_xx, x, create_graph=True, retain_graph=True, grad_outputs=torch.ones_like(u))[0]
+    u_xxxx = torch.autograd.grad(u_xxx, x, create_graph=True, retain_graph=True, grad_outputs=torch.ones_like(u))[0]
     ode = 0
-    for i in range(LFE):
-        ode = ode + u_xx + P[i] * (Lp[i] - x) / EI * (x <= Lp[i])
     for i in range(LFS):
-        ode = ode + u_xx + q[i]/EI * (Lq[i] * (Ln[i] + Lq[i]/2 -x)*(x <= Ln[i])+((Ln[i]+Lq[i]-x)**2)/2 *(x >= Ln[i]))*(x <= (Ln[i]+Lq[i]))
-    return ode
+        ode = ode + u_xxxx + (h(x-Ln[i], i) )/EI * (x <= (Ln[i]+Lq[i])) * (x >= Ln[i])
+    return ode, u_x, u_xx, u_xxx, u_xxxx
 
+x = np.linspace(0, Lb, 1000)
+qx = np.zeros(1000)
+for i in range(LFS):
+    qx = qx + (h(x-Ln[i], i) ) * (x <= (Ln[i]+Lq[i])) * (x >= Ln[i])
 
-iterations = 6000
+qx_int = integrate.cumtrapz(qx, x, initial=0)
+
+qxx = qx * x
+
+qxx_int = integrate.cumtrapz(qxx, x, initial=0)
+
+iterations = 5000
 for epoch in range(iterations):
     optimizer.zero_grad()  # to make the gradients zero
     x_bc = np.linspace(0, 1, 500)
     # linspace x Vektor Länge dritter Eintrag und Werte 0 und 500 gleichmäßig sortiert, Abstand immer gleich
     p_bc = np.random.uniform(low=0, high=1, size=(500, 1))
     px_bc = np.random.uniform(low=0, high=1, size=(500, 1))
-
     pt_x_bc = torch.unsqueeze(Variable(torch.from_numpy(x_bc).float(), requires_grad=False).to(device), 1)
     # unsqueeze wegen Kompatibilität
     pt_zero = Variable(torch.from_numpy(np.zeros(1)).float(), requires_grad=False).to(device)
+
+    x_collocation = np.random.uniform(low=0.0, high=Lb, size=(1000 * int(Lb), 1))
+    all_zeros = np.zeros((1000 * int(Lb), 1))
+
+    pt_x_collocation = Variable(torch.from_numpy(x_collocation).float(), requires_grad=True).to(device)
+    pt_all_zeros = Variable(torch.from_numpy(all_zeros).float(), requires_grad=False).to(device)
+    f_out, u_x, u_xx, u_xxx, u_xxxx = f(pt_x_collocation, net)  # ,pt_px_collocation,pt_p_collocation,net)
+    #Randbedingungen
 
     net_bc_out = net(pt_x_bc)  # ,pt_p_bc,pt_px_bc)
     # Wenn man den Linspace Vektor eingibt, wie sieht die Biegelinie aus?
@@ -99,15 +120,12 @@ for epoch in range(iterations):
     # Der erste und zweite Eintrag vom Linspace Vektor wird eingesetzt und die Steigung soll 0 sein e1=w'
     e2 = net_bc_out[0]
     # e2=w
-    mse_bc = mse_cost_function(e1, pt_zero) + mse_cost_function(e2, pt_zero)
+    e3 = u_xxx[0] - qx_int[-1]
+    #Bei dem Querkraftverlauf w''' soll bei w'''(0)=int(q(x))
+    #e4 = u_xx[0] - qxx_int[-1]
 
-    x_collocation = np.random.uniform(low=0.0, high=Lb, size=(1000 * int(Lb), 1))
-    all_zeros = np.zeros((1000 * int(Lb), 1))
+    mse_bc = mse_cost_function(e1, pt_zero) + mse_cost_function(e2, pt_zero) + mse_cost_function(e3, pt_zero) #+ mse_cost_function(e4, pt_zero)
 
-    pt_x_collocation = Variable(torch.from_numpy(x_collocation).float(), requires_grad=True).to(device)
-    pt_all_zeros = Variable(torch.from_numpy(all_zeros).float(), requires_grad=False).to(device)
-
-    f_out = f(pt_x_collocation, net)  # ,pt_px_collocation,pt_p_collocation,net)
 
     mse_f = mse_cost_function(f_out, pt_all_zeros)
 
@@ -124,7 +142,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 from scipy.interpolate import splrep, splev
 
-x = np.linspace(0, Lb, 1000)
 pt_x = torch.unsqueeze(Variable(torch.from_numpy(x).float(), requires_grad=False).to(device), 1)
 
 pt_u_out = net(pt_x)
@@ -139,11 +156,6 @@ u_der2 = np.gradient(np.squeeze(u_der_smooth), x)
 
 fig = plt.figure()
 
-Mx = np.zeros(1000)
-for i in range(LFE):
-    Mx = Mx + P[i] * (Lp[i] - x) * (x <= Lp[i])
-for i in range(LFS):
-    Mx = Mx + q[i]* (Lq[i] * (Ln[i]+Lq[i]/2-x)*(x <= Ln[i])+((Ln[i]+Lq[i]-x)**2)/2 *(x >= Ln[i]))*(x <= (Ln[i]+Lq[i]))
 
 plt.subplot(2, 2, 1)
 plt.xlabel('Meter')
@@ -165,8 +177,8 @@ plt.grid()
 
 plt.subplot(2, 2, 4)
 plt.xlabel('Meter ')
-plt.ylabel('$kNm')
-plt.plot(x, Mx)
+plt.ylabel('$kNm$')
+plt.plot(x, qx)
 plt.grid()
 
 #Momentenverlauf
