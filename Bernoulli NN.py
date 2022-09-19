@@ -11,6 +11,9 @@ import scipy as sp
 import scipy.integrate as integrate
 from scipy.integrate import quad
 import scipy.special as special
+import matplotlib.pyplot as plt
+import numpy as np
+from scipy.interpolate import splrep, splev
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 import numpy as np
@@ -22,8 +25,8 @@ class Net(nn.Module):
         self.hidden_layer1 = nn.Linear(1, 5)
         self.hidden_layer2 = nn.Linear(5, 9)
         self.hidden_layer3 = nn.Linear(9, 15)
-        self.hidden_layer4 = nn.Linear(15, 15)
-        self.hidden_layer5 = nn.Linear(15, 15)
+        self.hidden_layer4 = nn.Linear(15, 25)
+        self.hidden_layer5 = nn.Linear(25, 15)
         self.hidden_layer6 = nn.Linear(15, 9)
         self.hidden_layer7 = nn.Linear(9, 5)
         self.output_layer = nn.Linear(5, 1)
@@ -42,7 +45,7 @@ class Net(nn.Module):
 
 
 # Hyperparameter
-learning_rate = 0.01
+learning_rate = 0.015
 
 net = Net()
 net = net.to(device)
@@ -51,7 +54,7 @@ optimizer = torch.optim.Adam(net.parameters(), lr=learning_rate)
 scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=500, verbose=True)
 
 Lb = float(input('Länge des Kragarms [m]: '))
-EI = float(input('EI des Balkens [10^-6 kNcm²]: '))
+EI = float(input('EI des Balkens [10^6 kNcm²]: '))
 LFS = int(input('Anzahl Streckenlasten: '))
 
 # Lp = np.zeros(LFE)
@@ -92,24 +95,26 @@ qx = np.zeros(1000)
 for i in range(LFS):
     qx = qx + (h(x - Ln[i], i)) * (x <= (Ln[i] + Lq[i])) * (x >= Ln[i])
 
-qx_int = integrate.cumtrapz(qx, x, initial=0)
+Q0 = integrate.cumtrapz(qx, x, initial=0)
 
 qxx = qx * x
 
-qxx_int = integrate.cumtrapz(qxx, x, initial=0)
+M0 = integrate.cumtrapz(qxx, x, initial=0)
 
-iterations = 5000
+iterations = 10000
 for epoch in range(iterations):
     optimizer.zero_grad()  # to make the gradients zero
     x_bc = np.linspace(0, 1, 500)
-    # linspace x Vektor Länge dritter Eintrag und Werte 0 und 500 gleichmäßig sortiert, Abstand immer gleich
+    # linspace x Vektor zwischen 0 und 1, 500 Einträge gleichmäßiger Abstand
     p_bc = np.random.uniform(low=0, high=1, size=(500, 1))
     px_bc = np.random.uniform(low=0, high=1, size=(500, 1))
-    pt_x_bc = torch.unsqueeze(Variable(torch.from_numpy(x_bc).float(), requires_grad=False).to(device), 1)
+    #Zufällige Werte zwischen 0 und 1
+    pt_x_bc = torch.unsqueeze(Variable(torch.from_numpy(x_bc).float(), requires_grad=True).to(device), 1)
     # unsqueeze wegen Kompatibilität
     pt_zero = Variable(torch.from_numpy(np.zeros(1)).float(), requires_grad=False).to(device)
 
     x_collocation = np.random.uniform(low=0.0, high=Lb, size=(1000 * int(Lb), 1))
+    #x_collocation = np.linspace(0, Lb, 1000*int(Lb))
     all_zeros = np.zeros((1000 * int(Lb), 1))
 
     pt_x_collocation = Variable(torch.from_numpy(x_collocation).float(), requires_grad=True).to(device)
@@ -117,20 +122,27 @@ for epoch in range(iterations):
     f_out = f(pt_x_collocation, net)  # ,pt_px_collocation,pt_p_collocation,net)
     # Randbedingungen
 
-    net_bc_out = net(pt_x_bc)  # ,pt_p_bc,pt_px_bc)
-    # Wenn man den Linspace Vektor eingibt, wie sieht die Biegelinie aus?
-    e1 = (net_bc_out[0] - net_bc_out[1]) / (pt_x_bc[0] - pt_x_bc[1])
-    # Der erste und zweite Eintrag vom Linspace Vektor wird eingesetzt und die Steigung soll 0 sein e1=w'
-    temp2 = (net_bc_out[2] - 2 * net_bc_out[1] + net_bc_out[0]) * 500 ** 2
-    temp3 = (-net_bc_out[0] + 3 * net_bc_out[1] - 3 * net_bc_out[2] + net_bc_out[3]) * 500 ** 3
+    net_bc_out = net(pt_x_bc)
+    #ei --> Werte, die minimiert werden müssen
+    #e1 = (net_bc_out[0] - net_bc_out[1]) / (pt_x_bc[0] - pt_x_bc[1])
+    # e1 = w'(0)
+    u_x = torch.autograd.grad(net_bc_out, pt_x_bc, create_graph=True, retain_graph=True, grad_outputs=torch.ones_like(net_bc_out))[0]
+    u_xx = torch.autograd.grad(u_x, pt_x_bc, create_graph=True, retain_graph=True, grad_outputs=torch.ones_like(net_bc_out))[0]
+    u_xxx = torch.autograd.grad(u_xx, pt_x_bc, create_graph=True, retain_graph=True, grad_outputs=torch.ones_like(net_bc_out))[0]
+    e1 = u_x[0]
+    #w_xx0 = ( net_bc_out[2] ) * 500 ** 2
+    #w_xxx0 = ( - 3 * net_bc_out[2] + net_bc_out[3]) * 500 ** 3
     e2 = net_bc_out[0]
+    # e2=w(0)
+    e3 = u_xxx[0] + Q0[-1]/EI
+    #e3 = w_xxx0 + Q0[-1]/EI
+    #e3 = w'''(0) + Q(0)/EI
+    e4 = u_xx[0] + M0[-1]/EI
+    #e4 = w_xx0 + M0[-1]/EI
+    #e4 = w''(0) + M(0)/EI
 
-    # e2=w
-    e3 = temp3 - qx_int[-1]
-    # Bei dem Querkraftverlauf w''' soll bei w'''(0)=int(q(x))
-    e4 = temp2 - qxx_int[-1]
 
-    mse_bc = mse_cost_function(e1, pt_zero) + mse_cost_function(e2, pt_zero) + mse_cost_function(e3, pt_zero) + mse_cost_function(e4, pt_zero)
+    mse_bc = mse_cost_function(e1, pt_zero) + mse_cost_function(e2, pt_zero) + 3*mse_cost_function(e3, pt_zero) + mse_cost_function(e4, pt_zero)
 
     mse_f = mse_cost_function(f_out, pt_all_zeros)
 
@@ -141,13 +153,9 @@ for epoch in range(iterations):
     with torch.autograd.no_grad():
         if epoch % 10 == 9:
             print(epoch, "Traning Loss:", loss.data)
-            print('u_xx', temp2, '\n', 'u_xxx', temp3)
+            print('w_xx(0)', u_xx[0], '\n', 'w_xxx(0)', u_xxx[0])
 
 ##
-import matplotlib.pyplot as plt
-import numpy as np
-from scipy.interpolate import splrep, splev
-
 pt_x = torch.unsqueeze(Variable(torch.from_numpy(x).float(), requires_grad=False).to(device), 1)
 
 pt_u_out = net(pt_x)
@@ -163,26 +171,30 @@ u_der2 = np.gradient(np.squeeze(u_der_smooth), x)
 fig = plt.figure()
 
 plt.subplot(2, 2, 1)
+plt.title('$v$ Auslenkung')
 plt.xlabel('Meter')
-plt.ylabel('$v$ [cm]')
+plt.ylabel('[cm]')
 plt.plot(x, u_out)
 plt.grid()
 
 plt.subplot(2, 2, 2)
+plt.title('$\phi$ Neigung')
 plt.xlabel('Meter')
-plt.ylabel('$\phi$ $(10^{-2})$')
+plt.ylabel('$(10^{-2})$')
 plt.plot(x, u_der_smooth)
 plt.grid()
 
 plt.subplot(2, 2, 3)
-plt.xlabel('Meter (PINN Lösung)')
-plt.ylabel('$\kappa$ $(10^{-4})$[1/cm]')
+plt.title('$\kappa$ Krümmung')
+plt.xlabel('Meter')
+plt.ylabel('$(10^{-4})$[1/cm]')
 plt.plot(x, u_der2)
 plt.grid()
 
 plt.subplot(2, 2, 4)
+plt.title('q(x) Streckenlastverlauf')
 plt.xlabel('Meter ')
-plt.ylabel('$kNm$')
+plt.ylabel('$kN$')
 plt.plot(x, qx)
 plt.grid()
 
