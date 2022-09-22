@@ -14,6 +14,7 @@ import scipy.special as special
 import matplotlib.pyplot as plt
 import numpy as np
 from scipy.interpolate import splrep, splev
+import math
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 import numpy as np
@@ -26,9 +27,11 @@ class Net(nn.Module):
         self.hidden_layer2 = nn.Linear(5, 9)
         self.hidden_layer3 = nn.Linear(9, 15)
         self.hidden_layer4 = nn.Linear(15, 25)
-        self.hidden_layer5 = nn.Linear(25, 15)
-        self.hidden_layer6 = nn.Linear(15, 9)
-        self.hidden_layer7 = nn.Linear(9, 5)
+        self.hidden_layer5 = nn.Linear(25, 25)
+        self.hidden_layer6 = nn.Linear(25, 25)
+        self.hidden_layer7 = nn.Linear(25, 15)
+        self.hidden_layer8 = nn.Linear(15, 9)
+        self.hidden_layer9 = nn.Linear(9, 5)
         self.output_layer = nn.Linear(5, 1)
 
     def forward(self, x):  # ,p,px):
@@ -40,12 +43,14 @@ class Net(nn.Module):
         layer5_out = torch.sigmoid(self.hidden_layer5(layer4_out))
         layer6_out = torch.sigmoid(self.hidden_layer6(layer5_out))
         layer7_out = torch.sigmoid(self.hidden_layer7(layer6_out))
-        output = self.output_layer(layer7_out)  ## For regression, no activation is used in output layer
+        layer8_out = torch.sigmoid(self.hidden_layer8(layer7_out))
+        layer9_out = torch.sigmoid(self.hidden_layer9(layer8_out))
+        output = self.output_layer(layer9_out)  ## For regression, no activation is used in output layer
         return output
 
 
 # Hyperparameter
-learning_rate = 0.015
+learning_rate = 0.01
 
 net = Net()
 net = net.to(device)
@@ -86,7 +91,7 @@ def f(x, net):
     u_xxxx = torch.autograd.grad(u_xxx, x, create_graph=True, retain_graph=True, grad_outputs=torch.ones_like(u))[0]
     ode = 0
     for i in range(LFS):
-        ode = ode + u_xxxx + (h(x - Ln[i], i)) / EI * (x <= (Ln[i] + Lq[i])) * (x >= Ln[i])
+        ode = ode + u_xxxx - (h(x - Ln[i], i)) / EI * (x <= (Ln[i] + Lq[i])) * (x >= Ln[i])
     return ode
 
 
@@ -101,7 +106,7 @@ qxx = qx * x
 
 M0 = integrate.cumtrapz(qxx, x, initial=0)
 
-iterations = 10000
+iterations = 6000
 for epoch in range(iterations):
     optimizer.zero_grad()  # to make the gradients zero
     x_bc = np.linspace(0, 1, 500)
@@ -120,8 +125,8 @@ for epoch in range(iterations):
     pt_x_collocation = Variable(torch.from_numpy(x_collocation).float(), requires_grad=True).to(device)
     pt_all_zeros = Variable(torch.from_numpy(all_zeros).float(), requires_grad=False).to(device)
     f_out = f(pt_x_collocation, net)  # ,pt_px_collocation,pt_p_collocation,net)
-    # Randbedingungen
 
+    # Randbedingungen
     net_bc_out = net(pt_x_bc)
     #ei --> Werte, die minimiert werden müssen
     #e1 = (net_bc_out[0] - net_bc_out[1]) / (pt_x_bc[0] - pt_x_bc[1])
@@ -134,16 +139,14 @@ for epoch in range(iterations):
     #w_xxx0 = ( - 3 * net_bc_out[2] + net_bc_out[3]) * 500 ** 3
     e2 = net_bc_out[0]
     # e2=w(0)
-    e3 = u_xxx[0] + Q0[-1]/EI
+    e3 = u_xxx[0] - Q0[-1]/EI
     #e3 = w_xxx0 + Q0[-1]/EI
     #e3 = w'''(0) + Q(0)/EI
     e4 = u_xx[0] + M0[-1]/EI
     #e4 = w_xx0 + M0[-1]/EI
     #e4 = w''(0) + M(0)/EI
 
-
     mse_bc = mse_cost_function(e1, pt_zero) + mse_cost_function(e2, pt_zero) + 3*mse_cost_function(e3, pt_zero) + mse_cost_function(e4, pt_zero)
-
     mse_f = mse_cost_function(f_out, pt_all_zeros)
 
     loss = mse_bc + mse_f
