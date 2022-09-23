@@ -30,9 +30,7 @@ class Net(nn.Module):
         self.hidden_layer5 = nn.Linear(25, 25)
         self.hidden_layer6 = nn.Linear(25, 25)
         self.hidden_layer7 = nn.Linear(25, 15)
-        self.hidden_layer8 = nn.Linear(15, 9)
-        self.hidden_layer9 = nn.Linear(9, 5)
-        self.output_layer = nn.Linear(5, 1)
+        self.output_layer = nn.Linear(15, 1)
 
     def forward(self, x):  # ,p,px):
         inputs = x  # torch.cat([x,p,px],axis=1) # combined two arrays of 1 columns each to one array of 2 columns
@@ -43,9 +41,7 @@ class Net(nn.Module):
         layer5_out = torch.sigmoid(self.hidden_layer5(layer4_out))
         layer6_out = torch.sigmoid(self.hidden_layer6(layer5_out))
         layer7_out = torch.sigmoid(self.hidden_layer7(layer6_out))
-        layer8_out = torch.sigmoid(self.hidden_layer8(layer7_out))
-        layer9_out = torch.sigmoid(self.hidden_layer9(layer8_out))
-        output = self.output_layer(layer9_out)  ## For regression, no activation is used in output layer
+        output = self.output_layer(layer7_out)  ## For regression, no activation is used in output layer
         return output
 
 
@@ -98,15 +94,22 @@ def f(x, net):
 x = np.linspace(0, Lb, 1000)
 qx = np.zeros(1000)
 for i in range(LFS):
-    qx = qx + (h(x - Ln[i], i)) * (x <= (Ln[i] + Lq[i])) * (x >= Ln[i])
+    qx = qx + (h(torch.unsqueeze(Variable(torch.from_numpy(x).float(), requires_grad=False).to(device), 1) - Ln[i], i).cpu().detach().numpy()).squeeze() * (x <= (Ln[i] + Lq[i])) * (x >= Ln[i])
 
 Q0 = integrate.cumtrapz(qx, x, initial=0)
 
 qxx = qx * x
 
 M0 = integrate.cumtrapz(qxx, x, initial=0)
+y1 = net(torch.unsqueeze(Variable(torch.from_numpy(x).float(), requires_grad=False).to(device), 1))
+fig = plt.figure()
+plt.grid()
+ax = fig.add_subplot()
+ax.set_xlim([0,5])
+ax.set_ylim([-20,0])
+line1, = ax.plot(x,y1.cpu().detach().numpy())
 
-iterations = 6000
+iterations = 10000
 for epoch in range(iterations):
     optimizer.zero_grad()  # to make the gradients zero
     x_bc = np.linspace(0, 1, 500)
@@ -146,17 +149,20 @@ for epoch in range(iterations):
     #e4 = w_xx0 + M0[-1]/EI
     #e4 = w''(0) + M(0)/EI
 
-    mse_bc = mse_cost_function(e1, pt_zero) + mse_cost_function(e2, pt_zero) + 3*mse_cost_function(e3, pt_zero) + mse_cost_function(e4, pt_zero)
+    mse_bc = mse_cost_function(e1, pt_zero) + mse_cost_function(e2, pt_zero) + mse_cost_function(e3, pt_zero) + mse_cost_function(e4, pt_zero)
     mse_f = mse_cost_function(f_out, pt_all_zeros)
 
-    loss = mse_bc + mse_f
+    loss = mse_bc + 3*mse_f
 
     loss.backward()
     optimizer.step()
     with torch.autograd.no_grad():
         if epoch % 10 == 9:
             print(epoch, "Traning Loss:", loss.data)
-            print('w_xx(0)', u_xx[0], '\n', 'w_xxx(0)', u_xxx[0])
+            line1.set_ydata(net(torch.unsqueeze(Variable(torch.from_numpy(x).float(), requires_grad=False).to(device), 1)).cpu().detach().numpy())
+            fig.canvas.draw()
+            fig.canvas.flush_events()
+            #print('w_xx(0)', u_xx[0], '\n', 'w_xxx(0)', u_xxx[0])
 
 ##
 pt_x = torch.unsqueeze(Variable(torch.from_numpy(x).float(), requires_grad=False).to(device), 1)
@@ -178,6 +184,7 @@ plt.title('$v$ Auslenkung')
 plt.xlabel('Meter')
 plt.ylabel('[cm]')
 plt.plot(x, u_out)
+plt.plot(x,y)
 plt.grid()
 
 plt.subplot(2, 2, 2)
@@ -201,54 +208,6 @@ plt.ylabel('$kN$')
 plt.plot(x, qx)
 plt.grid()
 
-# Momentenverlauf
-
-# plt.plot(x, Mxe+Mxs)
-
-
-# Analytische Lösung Einzellast
-# y1= (-5*(500-x*100)/17000000)*10**4
-# y2= (-5*(500*(x*100)-0.5*(x*100)**2)/17000000)*10**2
-# y3= -5*(250*(x*100)**2-1/6*(x*100)**3)/17000000
-# plt.subplot(3, 2, 2)
-# plt.xlabel('Meter')
-# plt.ylabel('$v$ [cm]')
-# plt.plot(x, y3)
-# plt.grid()
-
-# plt.subplot(3, 2, 4)
-# plt.xlabel('Meter')
-# plt.ylabel('$\phi$ $(10^{-2})$')
-# plt.plot(x, y2)
-# plt.grid()
-
-# plt.subplot(3, 2, 6)
-# plt.xlabel('Meter')
-# plt.ylabel('$\kappa$ $(10^{-4})$[1/cm]')
-# plt.plot(x, y1)
-# plt.grid()
-
-# Analytische Lösung Streckenlast
-# z1= (-q *((Lq + Ln - x)**2)/EI)/2
-# z2= (q/(3*EI)*((Ln+Lq-x)**3-(Ln+Lq)**3))/2
-# z3= (q/(3*EI)*(-1/4*(Ln+Lq-x)**4-(Ln+Lq)**3*x+1/4*(Ln+Lq)**4))/2
-# plt.subplot(3, 2, 2)
-# plt.xlabel('Meter')
-
-# plt.plot(x, z3)
-# plt.grid()
-
-# plt.subplot(3, 2, 4)
-# plt.xlabel('Meter')
-
-# plt.plot(x, z2)
-# plt.grid()
-
-# plt.subplot(3, 2, 6)
-# plt.xlabel('Meter')
-
-# plt.plot(x, z1)
-# plt.grid()
 
 plt.show()
 ##
