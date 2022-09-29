@@ -24,26 +24,30 @@ class Net(nn.Module):
     def __init__(self):
         super(Net, self).__init__()
         self.hidden_layer1 = nn.Linear(1, 5)
-        self.hidden_layer2 = nn.Linear(5, 9)
-        self.hidden_layer3 = nn.Linear(9, 15)
-        self.hidden_layer4 = nn.Linear(15, 25)
+        self.hidden_layer2 = nn.Linear(5, 15)
+        self.hidden_layer3 = nn.Linear(15, 25)
+        self.hidden_layer4 = nn.Linear(25, 25)
         self.hidden_layer5 = nn.Linear(25, 25)
-        self.hidden_layer6 = nn.Linear(25, 25)
-        self.hidden_layer7 = nn.Linear(25, 15)
+        self.hidden_layer6 = nn.Linear(25, 15)
+        self.hidden_layer7 = nn.Linear(15, 15)
         self.output_layer = nn.Linear(15, 1)
 
     def forward(self, x):  # ,p,px):
         inputs = x  # torch.cat([x,p,px],axis=1) # combined two arrays of 1 columns each to one array of 2 columns
-        layer1_out = torch.sigmoid(self.hidden_layer1(inputs))
-        layer2_out = torch.sigmoid(self.hidden_layer2(layer1_out))
-        layer3_out = torch.sigmoid(self.hidden_layer3(layer2_out))
-        layer4_out = torch.sigmoid(self.hidden_layer4(layer3_out))
-        layer5_out = torch.sigmoid(self.hidden_layer5(layer4_out))
-        layer6_out = torch.sigmoid(self.hidden_layer6(layer5_out))
-        layer7_out = torch.sigmoid(self.hidden_layer7(layer6_out))
+        layer1_out = torch.tanh(self.hidden_layer1(inputs))
+        layer2_out = torch.tanh(self.hidden_layer2(layer1_out))
+        layer3_out = torch.tanh(self.hidden_layer3(layer2_out))
+        layer4_out = torch.tanh(self.hidden_layer4(layer3_out))
+        layer5_out = torch.tanh(self.hidden_layer5(layer4_out))
+        layer6_out = torch.tanh(self.hidden_layer6(layer5_out))
+        layer7_out = torch.tanh(self.hidden_layer7(layer6_out))
         output = self.output_layer(layer7_out)  ## For regression, no activation is used in output layer
         return output
 
+#    def initialize_weights(self):
+#        for m in self.modules():
+#            if isinstance(m, torch.tanh):
+#                nn.innit.kaiming_uniform_(m.weight)
 
 # Hyperparameter
 learning_rate = 0.01
@@ -80,14 +84,14 @@ def h(x, j):
 
 
 def f(x, net):
-    u = net(x)  # ,p,px)
+    u = net(x)
     u_x = torch.autograd.grad(u, x, create_graph=True, retain_graph=True, grad_outputs=torch.ones_like(u))[0]
     u_xx = torch.autograd.grad(u_x, x, create_graph=True, retain_graph=True, grad_outputs=torch.ones_like(u))[0]
     u_xxx = torch.autograd.grad(u_xx, x, create_graph=True, retain_graph=True, grad_outputs=torch.ones_like(u))[0]
     u_xxxx = torch.autograd.grad(u_xxx, x, create_graph=True, retain_graph=True, grad_outputs=torch.ones_like(u))[0]
     ode = 0
     for i in range(LFS):
-        ode = ode + u_xxxx - (h(x - Ln[i], i)) / EI * (x <= (Ln[i] + Lq[i])) * (x >= Ln[i])
+        ode = ode + u_xxxx - (h(x - Ln[i], i))/EI  * (x <= (Ln[i] + Lq[i])) * (x >= Ln[i])
     return ode
 
 
@@ -105,17 +109,17 @@ y1 = net(torch.unsqueeze(Variable(torch.from_numpy(x).float(), requires_grad=Fal
 fig = plt.figure()
 plt.grid()
 ax = fig.add_subplot()
-ax.set_xlim([0,5])
-ax.set_ylim([-20,0])
+ax.set_xlim([0,Lb])
+ax.set_ylim([-30,0])
 line1, = ax.plot(x,y1.cpu().detach().numpy())
 
-iterations = 10000
+iterations = 3000
 for epoch in range(iterations):
     optimizer.zero_grad()  # to make the gradients zero
     x_bc = np.linspace(0, 1, 500)
     # linspace x Vektor zwischen 0 und 1, 500 Einträge gleichmäßiger Abstand
-    p_bc = np.random.uniform(low=0, high=1, size=(500, 1))
-    px_bc = np.random.uniform(low=0, high=1, size=(500, 1))
+#   p_bc = np.random.uniform(low=0, high=1, size=(500, 1))
+#   px_bc = np.random.uniform(low=0, high=1, size=(500, 1))
     #Zufällige Werte zwischen 0 und 1
     pt_x_bc = torch.unsqueeze(Variable(torch.from_numpy(x_bc).float(), requires_grad=True).to(device), 1)
     # unsqueeze wegen Kompatibilität
@@ -148,17 +152,20 @@ for epoch in range(iterations):
     e4 = u_xx[0] + M0[-1]/EI
     #e4 = w_xx0 + M0[-1]/EI
     #e4 = w''(0) + M(0)/EI
+#    e5 = u_xxx[-1]
+    e6 = u_xx[-1]
 
-    mse_bc = mse_cost_function(e1, pt_zero) + mse_cost_function(e2, pt_zero) + mse_cost_function(e3, pt_zero) + mse_cost_function(e4, pt_zero)
+    mse_bc = mse_cost_function(e1, pt_zero) + mse_cost_function(e2, pt_zero) + 5*mse_cost_function(e3, pt_zero) + mse_cost_function(e4, pt_zero) + mse_cost_function(e6, pt_zero)
     mse_f = mse_cost_function(f_out, pt_all_zeros)
 
-    loss = mse_bc + 3*mse_f
+    loss = mse_f + mse_bc
 
     loss.backward()
     optimizer.step()
     with torch.autograd.no_grad():
         if epoch % 10 == 9:
             print(epoch, "Traning Loss:", loss.data)
+            plt.grid()
             line1.set_ydata(net(torch.unsqueeze(Variable(torch.from_numpy(x).float(), requires_grad=False).to(device), 1)).cpu().detach().numpy())
             fig.canvas.draw()
             fig.canvas.flush_events()
@@ -168,6 +175,7 @@ for epoch in range(iterations):
 pt_x = torch.unsqueeze(Variable(torch.from_numpy(x).float(), requires_grad=False).to(device), 1)
 
 pt_u_out = net(pt_x)
+
 u_out_cpu = pt_u_out.cpu()
 u_out = u_out_cpu.detach()
 u_out = u_out.numpy()
@@ -176,38 +184,54 @@ u_der = np.gradient(np.squeeze(u_out), x)
 bspl = splrep(x, u_der, s=5)
 u_der_smooth = splev(x, bspl)
 u_der2 = np.gradient(np.squeeze(u_der_smooth), x)
+u_der3 = np.gradient(np.squeeze(u_der2), x)
+u_der4 = np.gradient(np.squeeze(u_der3), x)
 
 fig = plt.figure()
 
-plt.subplot(2, 2, 1)
+plt.subplot(3, 2, 1)
 plt.title('$v$ Auslenkung')
 plt.xlabel('Meter')
 plt.ylabel('[cm]')
 plt.plot(x, u_out)
-plt.plot(x,y)
+#plt.plot(x, (-1/8 *x**4 + np.sin(x) + 15.22/6 *x**3 - 38.23/2 *x**2)/EI)
+plt.plot(x, ((-0.2/360 * x**6 + 8.333/6 * x**3 - 31.25/2 * x**2))/EI)
 plt.grid()
 
-plt.subplot(2, 2, 2)
+plt.subplot(3, 2, 2)
 plt.title('$\phi$ Neigung')
 plt.xlabel('Meter')
 plt.ylabel('$(10^{-2})$')
 plt.plot(x, u_der_smooth)
+plt.plot(x, (-0.2/60 * x**5 + 8.333/2 * x**2 - 31.25 * x)/EI)
 plt.grid()
 
-plt.subplot(2, 2, 3)
+plt.subplot(3, 2, 3)
 plt.title('$\kappa$ Krümmung')
 plt.xlabel('Meter')
 plt.ylabel('$(10^{-4})$[1/cm]')
 plt.plot(x, u_der2)
+plt.plot(x, ((-0.2/12 * x**4 + 8.333 * x - 31.25 ))/EI)
 plt.grid()
 
-plt.subplot(2, 2, 4)
+plt.subplot(3, 2, 4)
+plt.title('w''')
+plt.xlabel('Meter')
+plt.ylabel('')
+plt.plot(x, u_der3/EI)
+plt.plot(x, ((-0.2/3 * x**3 + 8.333 ))/EI)
+plt.grid()
+
+plt.subplot(3, 2, 5)
 plt.title('q(x) Streckenlastverlauf')
 plt.xlabel('Meter ')
 plt.ylabel('$kN$')
+plt.plot(x, u_der4)
 plt.plot(x, qx)
 plt.grid()
 
 
 plt.show()
 ##
+##
+
