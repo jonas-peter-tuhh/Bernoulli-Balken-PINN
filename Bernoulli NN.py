@@ -91,7 +91,7 @@ def f(x, net):
     u_xxxx = torch.autograd.grad(u_xxx, x, create_graph=True, retain_graph=True, grad_outputs=torch.ones_like(u))[0]
     ode = 0
     for i in range(LFS):
-        ode = ode + u_xxxx - (h(x - Ln[i], i))/EI  * (x <= (Ln[i] + Lq[i])) * (x >= Ln[i])
+        ode = ode + u_xxxx - (h(x - Ln[i], i))/EI * (x <= (Ln[i] + Lq[i])) * (x >= Ln[i])
     return ode
 
 
@@ -116,7 +116,7 @@ line1, = ax.plot(x,y1.cpu().detach().numpy())
 iterations = 3000
 for epoch in range(iterations):
     optimizer.zero_grad()  # to make the gradients zero
-    x_bc = np.linspace(0, 1, 500)
+    x_bc = np.linspace(0, 1, 5000)
     # linspace x Vektor zwischen 0 und 1, 500 Einträge gleichmäßiger Abstand
 #   p_bc = np.random.uniform(low=0, high=1, size=(500, 1))
 #   px_bc = np.random.uniform(low=0, high=1, size=(500, 1))
@@ -152,12 +152,11 @@ for epoch in range(iterations):
     e4 = u_xx[0] + M0[-1]/EI
     #e4 = w_xx0 + M0[-1]/EI
     #e4 = w''(0) + M(0)/EI
-#    e5 = u_xxx[-1]
+    e5 = u_xxx[-1]
     e6 = u_xx[-1]
 
-    mse_bc = mse_cost_function(e1, pt_zero) + mse_cost_function(e2, pt_zero) + 5*mse_cost_function(e3, pt_zero) + mse_cost_function(e4, pt_zero) + mse_cost_function(e6, pt_zero)
+    mse_bc = mse_cost_function(e1, pt_zero) + mse_cost_function(e2, pt_zero) + mse_cost_function(e3, pt_zero) + mse_cost_function(e4, pt_zero) #+ mse_cost_function(e5, pt_zero) + mse_cost_function(e6, pt_zero)
     mse_f = mse_cost_function(f_out, pt_all_zeros)
-
     loss = mse_f + mse_bc
 
     loss.backward()
@@ -172,10 +171,18 @@ for epoch in range(iterations):
             #print('w_xx(0)', u_xx[0], '\n', 'w_xxx(0)', u_xxx[0])
 
 ##
-pt_x = torch.unsqueeze(Variable(torch.from_numpy(x).float(), requires_grad=False).to(device), 1)
+pt_x = torch.unsqueeze(Variable(torch.from_numpy(x).float(), requires_grad=True).to(device), 1)
 
 pt_u_out = net(pt_x)
+w_x = torch.autograd.grad(pt_u_out, pt_x, create_graph=True, retain_graph=True, grad_outputs=torch.ones_like(pt_u_out))[0]
+w_xx = torch.autograd.grad(w_x, pt_x, create_graph=True, retain_graph=True, grad_outputs=torch.ones_like(pt_u_out))[0]
+w_xxx = torch.autograd.grad(w_xx, pt_x, create_graph=True, retain_graph=True, grad_outputs=torch.ones_like(pt_u_out))[0]
+w_xxxx = torch.autograd.grad(w_xxx, pt_x, create_graph=True, retain_graph=True, grad_outputs=torch.ones_like(pt_u_out))[0]
 
+w_x = w_x.cpu().detach().numpy()
+w_xx = w_xx.cpu().detach().numpy()
+w_xxx = w_xxx.cpu().detach().numpy()
+w_xxxx = w_xxxx.cpu().detach().numpy()
 u_out_cpu = pt_u_out.cpu()
 u_out = u_out_cpu.detach()
 u_out = u_out.numpy()
@@ -202,7 +209,8 @@ plt.subplot(3, 2, 2)
 plt.title('$\phi$ Neigung')
 plt.xlabel('Meter')
 plt.ylabel('$(10^{-2})$')
-plt.plot(x, u_der_smooth)
+plt.plot(x, w_x)
+#plt.plot(x, u_der_smooth)
 plt.plot(x, (-0.2/60 * x**5 + 8.333/2 * x**2 - 31.25 * x)/EI)
 plt.grid()
 
@@ -210,7 +218,8 @@ plt.subplot(3, 2, 3)
 plt.title('$\kappa$ Krümmung')
 plt.xlabel('Meter')
 plt.ylabel('$(10^{-4})$[1/cm]')
-plt.plot(x, u_der2)
+plt.plot(x, w_xx)
+#plt.plot(x, u_der2)
 plt.plot(x, ((-0.2/12 * x**4 + 8.333 * x - 31.25 ))/EI)
 plt.grid()
 
@@ -218,7 +227,7 @@ plt.subplot(3, 2, 4)
 plt.title('w''')
 plt.xlabel('Meter')
 plt.ylabel('')
-plt.plot(x, u_der3/EI)
+plt.plot(x, w_xxx)
 plt.plot(x, ((-0.2/3 * x**3 + 8.333 ))/EI)
 plt.grid()
 
@@ -226,8 +235,8 @@ plt.subplot(3, 2, 5)
 plt.title('q(x) Streckenlastverlauf')
 plt.xlabel('Meter ')
 plt.ylabel('$kN$')
-plt.plot(x, u_der4)
-plt.plot(x, qx)
+plt.plot(x, w_xxxx)
+plt.plot(x, qx/EI)
 plt.grid()
 
 
