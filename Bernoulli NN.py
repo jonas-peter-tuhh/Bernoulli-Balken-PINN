@@ -50,7 +50,7 @@ class Net(nn.Module):
 #                nn.innit.kaiming_uniform_(m.weight)
 
 # Hyperparameter
-learning_rate = 0.01
+learning_rate = 0.005
 
 net = Net()
 net = net.to(device)
@@ -113,10 +113,10 @@ ax.set_xlim([0,Lb])
 ax.set_ylim([-30,0])
 line1, = ax.plot(x,y1.cpu().detach().numpy())
 
-iterations = 3000
+iterations = 10000
 for epoch in range(iterations):
     optimizer.zero_grad()  # to make the gradients zero
-    x_bc = np.linspace(0, 1, 5000)
+    x_bc = np.linspace(0, Lb, 500)
     # linspace x Vektor zwischen 0 und 1, 500 Einträge gleichmäßiger Abstand
 #   p_bc = np.random.uniform(low=0, high=1, size=(500, 1))
 #   px_bc = np.random.uniform(low=0, high=1, size=(500, 1))
@@ -155,7 +155,7 @@ for epoch in range(iterations):
     e5 = u_xxx[-1]
     e6 = u_xx[-1]
 
-    mse_bc = mse_cost_function(e1, pt_zero) + mse_cost_function(e2, pt_zero) + mse_cost_function(e3, pt_zero) + mse_cost_function(e4, pt_zero) #+ mse_cost_function(e5, pt_zero) + mse_cost_function(e6, pt_zero)
+    mse_bc = mse_cost_function(e1, pt_zero) + mse_cost_function(e2, pt_zero) + mse_cost_function(e3, pt_zero) + mse_cost_function(e4, pt_zero) + mse_cost_function(e5, pt_zero)+ mse_cost_function(e6, pt_zero)
     mse_f = mse_cost_function(f_out, pt_all_zeros)
     loss = mse_f + mse_bc
 
@@ -201,8 +201,9 @@ plt.title('$v$ Auslenkung')
 plt.xlabel('Meter')
 plt.ylabel('[cm]')
 plt.plot(x, u_out)
-#plt.plot(x, (-1/8 *x**4 + np.sin(x) + 15.22/6 *x**3 - 38.23/2 *x**2)/EI)
-plt.plot(x, ((-0.2/360 * x**6 + 8.333/6 * x**3 - 31.25/2 * x**2))/EI)
+plt.plot(x, (-1/8 *x**4 - np.sin(x) + 18.31/6 *x**3 - 55.26/2 *x**2)/EI)#3+sin(x)
+#plt.plot(x, ((-0.2/360 * x**6 + 8.333/6 * x**3 - 31.25/2 * x**2))/EI)#0.2*x**2
+#plt.plot(x, (np.cos(x)- 1/8 * x**4 + 23.99/6 * x**3 - 71.95/2 * x**2)/EI)#3+cos(x)
 plt.grid()
 
 plt.subplot(3, 2, 2)
@@ -211,7 +212,9 @@ plt.xlabel('Meter')
 plt.ylabel('$(10^{-2})$')
 plt.plot(x, w_x)
 #plt.plot(x, u_der_smooth)
-plt.plot(x, (-0.2/60 * x**5 + 8.333/2 * x**2 - 31.25 * x)/EI)
+plt.plot(x, (-1/2 * x**3 - np.cos(x) + 18.31/2 * x**2 - 55.26 * x)/EI)#sin(x)+3
+#plt.plot(x, (-0.2/60 * x**5 + 8.333/2 * x**2 - 31.25 * x)/EI) #0.2*x**2#
+#plt.plot(x, (-np.sin(x) - 0.5*x**3 + 23.99/2 * x**2 - 71.95/2 * x)/EI)#cos(x)+3
 plt.grid()
 
 plt.subplot(3, 2, 3)
@@ -220,7 +223,9 @@ plt.xlabel('Meter')
 plt.ylabel('$(10^{-4})$[1/cm]')
 plt.plot(x, w_xx)
 #plt.plot(x, u_der2)
-plt.plot(x, ((-0.2/12 * x**4 + 8.333 * x - 31.25 ))/EI)
+plt.plot(x, (-3/2 * x**2 + np.sin(x) + 18.31 * x - 55.26)/EI)#sin(x)+3
+#plt.plot(x, ((-0.2/12 * x**4 + 8.333 * x - 31.25 ))/EI)#0.2*x**2
+#plt.plot(x, (-np.cos(x) - 3/2 * x**2 + 23.99*x - 71.95)/EI)
 plt.grid()
 
 plt.subplot(3, 2, 4)
@@ -228,14 +233,15 @@ plt.title('w''')
 plt.xlabel('Meter')
 plt.ylabel('')
 plt.plot(x, w_xxx)
-plt.plot(x, ((-0.2/3 * x**3 + 8.333 ))/EI)
+plt.plot(x, (-3*x + np.cos(x) + 18.31)/EI)#3+sin(x)
+#plt.plot(x, (np.sin(x) - 3*x + 23.99)/EI)#3+cos(x)
 plt.grid()
 
 plt.subplot(3, 2, 5)
 plt.title('q(x) Streckenlastverlauf')
 plt.xlabel('Meter ')
 plt.ylabel('$kN$')
-plt.plot(x, w_xxxx)
+plt.plot(x, -w_xxxx)
 plt.plot(x, qx/EI)
 plt.grid()
 
