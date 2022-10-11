@@ -95,7 +95,7 @@ def f(x, net):
     return ode
 
 
-x = np.linspace(0, Lb, 1000)
+x = np.linspace(0, Lb+0.1, 1000)
 qx = np.zeros(1000)
 for i in range(LFS):
     qx = qx + (h(torch.unsqueeze(Variable(torch.from_numpy(x).float(), requires_grad=False).to(device), 1) - Ln[i], i).cpu().detach().numpy()).squeeze() * (x <= (Ln[i] + Lq[i])) * (x >= Ln[i])
@@ -113,7 +113,7 @@ ax.set_xlim([0,Lb])
 ax.set_ylim([-30,0])
 line1, = ax.plot(x,y1.cpu().detach().numpy())
 
-iterations = 10000
+iterations = 5000
 for epoch in range(iterations):
     optimizer.zero_grad()  # to make the gradients zero
     x_bc = np.linspace(0, Lb, 500)
@@ -201,8 +201,8 @@ plt.title('$v$ Auslenkung')
 plt.xlabel('Meter')
 plt.ylabel('[cm]')
 plt.plot(x, u_out)
-plt.plot(x, (-1/8 *x**4 - np.sin(x) + 18.31/6 *x**3 - 55.26/2 *x**2)/EI)#3+sin(x)
-#plt.plot(x, ((-0.2/360 * x**6 + 8.333/6 * x**3 - 31.25/2 * x**2))/EI)#0.2*x**2
+#plt.plot(x, (-1/8 *x**4 - np.sin(x) + 18.31/6 *x**3 - 55.26/2 *x**2)/EI)#3+sin(x)
+plt.plot(x, ((-0.2/360 * x**6 + 8.333/6 * x**3 - 31.25/2 * x**2))/EI)#0.2*x**2
 #plt.plot(x, (np.cos(x)- 1/8 * x**4 + 23.99/6 * x**3 - 71.95/2 * x**2)/EI)#3+cos(x)
 plt.grid()
 
@@ -212,8 +212,8 @@ plt.xlabel('Meter')
 plt.ylabel('$(10^{-2})$')
 plt.plot(x, w_x)
 #plt.plot(x, u_der_smooth)
-plt.plot(x, (-1/2 * x**3 - np.cos(x) + 18.31/2 * x**2 - 55.26 * x)/EI)#sin(x)+3
-#plt.plot(x, (-0.2/60 * x**5 + 8.333/2 * x**2 - 31.25 * x)/EI) #0.2*x**2#
+#plt.plot(x, (-1/2 * x**3 - np.cos(x) + 18.31/2 * x**2 - 55.26 * x)/EI)#sin(x)+3
+plt.plot(x, (-0.2/60 * x**5 + 8.333/2 * x**2 - 31.25 * x)/EI) #0.2*x**2#
 #plt.plot(x, (-np.sin(x) - 0.5*x**3 + 23.99/2 * x**2 - 71.95/2 * x)/EI)#cos(x)+3
 plt.grid()
 
@@ -223,8 +223,8 @@ plt.xlabel('Meter')
 plt.ylabel('$(10^{-4})$[1/cm]')
 plt.plot(x, w_xx)
 #plt.plot(x, u_der2)
-plt.plot(x, (-3/2 * x**2 + np.sin(x) + 18.31 * x - 55.26)/EI)#sin(x)+3
-#plt.plot(x, ((-0.2/12 * x**4 + 8.333 * x - 31.25 ))/EI)#0.2*x**2
+#plt.plot(x, (-3/2 * x**2 + np.sin(x) + 18.31 * x - 55.26)/EI)#sin(x)+3
+plt.plot(x, ((-0.2/12 * x**4 + 8.333 * x - 31.25 ))/EI)#0.2*x**2
 #plt.plot(x, (-np.cos(x) - 3/2 * x**2 + 23.99*x - 71.95)/EI)
 plt.grid()
 
@@ -233,7 +233,7 @@ plt.title('w''')
 plt.xlabel('Meter')
 plt.ylabel('')
 plt.plot(x, w_xxx)
-plt.plot(x, (-3*x + np.cos(x) + 18.31)/EI)#3+sin(x)
+#plt.plot(x, (-3*x + np.cos(x) + 18.31)/EI)#3+sin(x)
 #plt.plot(x, (np.sin(x) - 3*x + 23.99)/EI)#3+cos(x)
 plt.grid()
 
