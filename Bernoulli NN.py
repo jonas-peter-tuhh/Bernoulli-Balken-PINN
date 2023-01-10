@@ -24,6 +24,7 @@ class Net(nn.Module):
         self.output_layer = nn.Linear(200, 1)
 
     def forward(self, x):  # ,p,px):
+        x = torch.unsqueeze(x, 1)
         layer1_out = torch.tanh(self.hidden_layer1(x))
         output = self.output_layer(layer1_out)  ## For regression, no activation is used in output layer
         return output
@@ -89,7 +90,7 @@ if train:
     line1, = ax1.plot(x, net_out_plot)
     plt.show(block = False)
     pt_x = myconverter(x)
-    f_anal=(-1/120 * normfactor *pt_x**5 + 1/6 * Q0[-1] * pt_x**3 - M0[-1]/2 *pt_x**2)/EI
+    f_anal=(-1/120 * normfactor * x**5 + 1/6 * Q0[-1] *  x**3 - M0[-1]/2 * x**2)/EI
 ##
 iterations = 1000000
 for epoch in range(iterations):
@@ -125,8 +126,8 @@ for epoch in range(iterations):
         if epoch % 10 == 9:
             print(epoch, "Traning Loss:", loss.data)
             plt.grid()
-            net_out_v = net(pt_x)
-            err = torch.norm(net_out_v - f_anal, 2)
+            net_out_v = myconverter(net(pt_x))
+            err = np.linalg.norm(net_out_v - f_anal, 2)
             print(f'Error = {err}')
             if err < 0.1 * Lb:
                 print(f"Die L^2 Norm des Fehlers ist {err}.\nStoppe Lernprozess")
